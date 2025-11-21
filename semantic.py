@@ -48,7 +48,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.chains import RetrievalQA
 import json
 
-MODEL_NAME = "llama3"   # or "llama3:8b", "llama3:70b", etc.
+MODEL_NAME = "llama3"
 
 # Use SentenceTransformer embeddings as before
 class STEmbeddings(Embeddings):
@@ -68,11 +68,11 @@ product_text = json.dumps(product_meta, indent=2)
 store = Chroma.from_texts([product_text], embedding=emb)
 retriever = store.as_retriever()
 
-# 🔹 Replace LlamaCpp with Ollama
+# Load from Ollama
 llm = ChatOllama(
     model=MODEL_NAME,
     temperature=0.2,
-    num_ctx=4096,   # similar to n_ctx
+    num_ctx=4096,
 )
 
 # QA Chain
