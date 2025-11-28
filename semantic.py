@@ -62,7 +62,7 @@ def build_messages(name, category, rating, images, tone):
     content.append({
         "type": "text",
         "text": (
-            "You are a product copywriter. Write ONE concise customer-facing blurb (35–45 words). "
+            "You are a product copywriter. Write ONE concise customer-facing blurb (15-20 words). "
             "Use only what is clearly seen plus the metadata. Include the rating as X.X/5. "
             "Avoid brand/spec guesses or hype.\n\n"
             f"Product name: {name}\n"
@@ -103,6 +103,8 @@ def extract_summary(raw: str) -> str:
     # clean common trailing artifacts
     summary = re.sub(r'(</s>|\[END\]|\[/ASSISTANT\])\s*$', '', summary).strip()
     return summary
+
+print("part done")
 
 for pid, score in ranked[:10]:
     summary = extract_summary(summarize_product(products[pid]['title'], products[pid]['main_category'], products[pid]['average_rating'], products[pid]['images']))
