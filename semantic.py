@@ -8,6 +8,7 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 from io import BytesIO
 from summarize import Summarizer
 from rag import RAG
+from rank import rank
 
 
 model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
@@ -38,8 +39,16 @@ emb_matrix = np.stack([reviews[pid] for pid in product_ids])
 # Compute cosine similarity with the query
 similarities = cosine_similarity([query_embedding], emb_matrix)[0]
 
-# Rank products by similarity
-ranked = sorted(zip(product_ids, similarities), key=lambda x: x[1], reverse=True)
+# Rank products by using multi-factor + mmr
+ranked = rank(
+    product_ids,
+    similarities,
+    products,
+    reviews,
+    query,
+    top_k_candidates=200,
+    final_k=10
+)
 
 summarizer = Summarizer(device="cuda")
 
@@ -59,7 +68,9 @@ for idx, (pid, score) in enumerate(ranked[:10]):
 rag = RAG(model, default_meta=products[ranked[0][0]])
 
 print("If you have any questions about the products, please ask.\n")
+
 print(f"Now focusing on the product at rank 1, which is {products[ranked[0][0]]['title']}, if you want to change, please follow this format: rank #.\n")
+
 print("Or if you don't have any questions, please type 'exit' to end this procedure.\n")
 while True:
     query = input("Please input your questions or instructions:\n")
@@ -67,17 +78,28 @@ while True:
         break
     else:
         strings = query.strip().split(" ")
+
         if len(strings) == 2 and strings[0] == 'rank':
+
             if strings[1].isdigit():
+
                 num = int(strings[1])
+
                 if num > 10:
+
                     print("Please choose a number between 1 and 10.\n")
+
                 else:
+
                     product_meta = products[ranked[num][0]]
+
                     rag.change_product(product_meta)
+
                     print(f"Now focusing on the product at rank {num}, which is {products[ranked[num][0]]['title']}.\n")
             else:
+
                 print("please input a number.\n")
         else:
+
             print("RAG Answer:\n")
             print(rag.generate_answer(query) + '\n')
