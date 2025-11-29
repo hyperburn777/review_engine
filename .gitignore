@@ -5,3 +5,4 @@ venv/
 env/
 *.jsonl.gz
 data/
+__pycache__/
