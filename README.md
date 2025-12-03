@@ -7,14 +7,6 @@ emb_matrix = np.stack([reviews[pid] for pid in product_ids])
 
 similarities = cosine_similarity([query_embedding], emb_matrix)[0]
 
-# baseline: cosine similarity
-old_pairs = build_old_rank(
-    product_ids,
-    similarities,
-    top_k=10
-)
-
-# new ranking: multi-factor + mmr
 new_pairs = rank(
     product_ids,
     similarities,
