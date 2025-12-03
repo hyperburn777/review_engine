@@ -67,9 +67,7 @@ THOUSAND = 1000.0
 
 
 def parse_budget(query):
-    """
-        Extract an anchor budget number from query.
-    """
+    #  Extract anchor budget number
 
     lower_query = query.lower()
 
@@ -135,9 +133,7 @@ def parse_budget(query):
     return None
 
 
-"""
-    Aspect keywords we consider important in shopping decisions.
-"""
+# Aspect keywords
 ASPECT_LEXICON = {
     "size": ["mini", "compact", "small", "under‐counter", "narrow", "slim", "dorm", "space saving"],
     "capacity": ["capacity", "storage", "liters", "cu ft", "cubic feet", "cans", "bottles", "holds", "fits"],
@@ -259,9 +255,7 @@ def bayesian_rating(avg_rate, rate_count, global_avg_rate=4.2, m=50.0):
 
 
 def parse_timestamp(x):
-    """
-        Parse different timestamp formats into a float UNIX timestamp (seconds).
-    """
+    # Parse timestamp formats into a float UNIX timestamp (seconds)
     if x is None:
         return None
 
@@ -304,9 +298,7 @@ def fit_tfidf_corpus(texts):
 
 
 def tfidf_text_vector(text):
-    """
-        Embed a single product's textual description into a dense TF-IDF vector.
-    """
+    # Embed a single product's description into a dense TF-IDF vector
 
     if not text:
         return np.zeros(tfidf_vectorizer.max_features, dtype=float)
