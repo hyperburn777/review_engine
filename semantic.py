@@ -10,6 +10,7 @@ from summarize import Summarizer
 from rag import RAG
 from rank import rank
 
+PRODUCTS = 3
 
 model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
 
@@ -47,14 +48,14 @@ ranked = rank(
     reviews,
     query,
     top_k_candidates=200,
-    final_k=10
+    final_k=PRODUCTS
 )
 
 summarizer = Summarizer(device="cuda")
 
 print("Top Recommended Items:\n")
 
-for idx, (pid, score) in enumerate(ranked[:10]):
+for idx, (pid, score) in enumerate(ranked[:PRODUCTS]):
     summary = summarizer.generate_summary(
         products[pid]["title"],
         products[pid]["main_category"],
@@ -85,9 +86,9 @@ while True:
 
                 num = int(strings[1])
 
-                if num > 10:
+                if num > PRODUCTS:
 
-                    print("Please choose a number between 1 and 10.\n")
+                    print(f"Please choose a number between 1 and {PRODUCTS}.\n")
 
                 else:
 
