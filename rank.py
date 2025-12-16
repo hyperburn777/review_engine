@@ -7,13 +7,44 @@ import numpy as np
 import spacy
 from nltk.stem import PorterStemmer
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import CrossEncoder
+
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+
+# Cross-Encoder as a reranker on top of similarities
+reranker_model = CrossEncoder(RERANKER_MODEL, max_length=512)
+
+
+def compute_reranker_scores(query, products, pairs, model, batch_size=32):
+    if not pairs:
+        return np.array([], dtype=float)
+
+    query_2_products_text = []
+    for pid, _ in pairs:
+        meta_data = products.get(pid, {}) or {}
+        title = meta_data.get("title") or ""
+        summary = meta_data.get("summary") or ""
+        text = (title + " " + summary).strip()
+
+        if not text:
+            text = title or summary or ""
+
+        query_2_products_text.append((query, text))
+
+    scores = []
+    for i in range(0, len(query_2_products_text), batch_size):
+        batch = query_2_products_text[i:i + batch_size]
+        batch_scores = model.predict(batch)
+
+        if hasattr(batch_scores, "tolist"):
+            batch_scores = batch_scores.tolist()
+
+        scores.extend(batch_scores)
+
+    return np.array(scores, dtype=float)
 
 
 def min_max_normalization(values, lower=1, upper=99, epsilon=1e-9):
-    """
-        Normalize values to [0, 1] and trim outliers.
-    """
-
     arr = np.array(values, dtype=float)
 
     low, high = np.percentile(arr, [lower, upper])
@@ -36,9 +67,7 @@ THOUSAND = 1000.0
 
 
 def parse_budget(query):
-    """
-        Extract an anchor budget number from query.
-    """
+    #  Extract anchor budget number
 
     lower_query = query.lower()
 
@@ -104,9 +133,7 @@ def parse_budget(query):
     return None
 
 
-"""
-    Aspect keywords we consider important in shopping decisions.
-"""
+# Aspect keywords
 ASPECT_LEXICON = {
     "size": ["mini", "compact", "small", "under‐counter", "narrow", "slim", "dorm", "space saving"],
     "capacity": ["capacity", "storage", "liters", "cu ft", "cubic feet", "cans", "bottles", "holds", "fits"],
@@ -164,9 +191,7 @@ def tokenize(text):
 
 
 def aspect_match_score(query, text):
-    """
-        Measure how well the product text covers the same aspects the user asked for.
-    """
+    # Measure how well the product text covers the same aspects the user asked for
 
     lower_query = (query or "").lower()
     lower_text = (text or "").lower()
@@ -194,20 +219,22 @@ def aspect_match_score(query, text):
     return found / total
 
 
-def price_fit_score(price, anchor, price_std=None, sigma_ratio=0.3, sigma_std_factor=0.5):
-    """
-        Score how well a product's price matches the user's expected budget.
-    """
-
-    if price is None or anchor is None or price <= 0 or anchor <= 0:
+def price_fit_score(price, anchor, price_std=None,
+                    sigma_ratio=0.3, sigma_std_factor=0.5):
+    # No anchor, return neutral point
+    if anchor is None or anchor <= 0:
         return 0.5
 
-    sigma_base = sigma_ratio * anchor
+    # No price / dirty value
+    # Treat it as a risky product, return a low score
+    if price is None or price <= 0:
+        return 0.2
 
+    sigma_base = sigma_ratio * anchor
     if price_std is not None and price_std > 0:
         sigma_base = max(sigma_base, sigma_std_factor * float(price_std))
 
-    over_scale = 0.8
+    over_scale = 0.6
     under_scale = 1.2
     sigma = (over_scale if price > anchor else under_scale) * sigma_base
 
@@ -215,10 +242,8 @@ def price_fit_score(price, anchor, price_std=None, sigma_ratio=0.3, sigma_std_fa
 
 
 def bayesian_rating(avg_rate, rate_count, global_avg_rate=4.2, m=50.0):
-    """
-        Compute a Bayesian-adjusted rating score.
-        Because we don't fully trust products with very few reviews.
-    """
+    # Compute a Bayesian-adjusted rating score.
+    # Because we don't fully trust products with very few reviews.
 
     if avg_rate is None:
         avg_rate = global_avg_rate
@@ -230,9 +255,7 @@ def bayesian_rating(avg_rate, rate_count, global_avg_rate=4.2, m=50.0):
 
 
 def parse_timestamp(x):
-    """
-        Parse different timestamp formats into a float UNIX timestamp (seconds).
-    """
+    # Parse timestamp formats into a float UNIX timestamp (seconds)
     if x is None:
         return None
 
@@ -250,9 +273,7 @@ SECOND_OF_DAY = 86400.0
 
 
 def recency_score(last_ts, now_ts=None, lambda_per_day=1 / 180):
-    """
-        Compute a freshness score using exponential decay.
-    """
+    # Compute a freshness score using exponential decay
     if last_ts is None:
         return 0.5
 
@@ -277,9 +298,7 @@ def fit_tfidf_corpus(texts):
 
 
 def tfidf_text_vector(text):
-    """
-        Embed a single product's textual description into a dense TF-IDF vector.
-    """
+    # Embed a single product's description into a dense TF-IDF vector
 
     if not text:
         return np.zeros(tfidf_vectorizer.max_features, dtype=float)
@@ -297,21 +316,38 @@ def tfidf_text_vector(text):
 MAX_STAR_RATING = 5.0
 
 
+def mmr_cosine_similarity(vec_a, vec_b, epsilon=1e-9):
+    if vec_a is None or vec_b is None:
+        return 0.0
+
+    arr_a = np.asarray(vec_a, dtype=float)
+    arr_b = np.asarray(vec_b, dtype=float)
+
+    norm_a = np.linalg.norm(arr_a)
+    norm_b = np.linalg.norm(arr_b)
+
+    if norm_a < epsilon or norm_b < epsilon:
+        return 0.0
+
+    return float(np.dot(arr_a, arr_b) / (norm_a * norm_b))
+
+
+EPSILON = 1e-9
+
+
 def rank(
         product_ids, similarities, products, reviews, query,
         top_k_candidates=200, final_k=10,
-        weights=None,
-        learned_weights=None,
-        lambda_per_day_by_category=None
 ):
-    """
-        Main ranking pipeline.
-    """
-
+    # Desc by cos sim, pick up top-k
     pairs = sorted(zip(product_ids, similarities), key=lambda x: x[1], reverse=True)[:top_k_candidates]
 
     if not pairs:
         return []
+
+    # Reranking
+    reranker_scores = compute_reranker_scores(query, products, pairs, model=reranker_model)
+    normalized_reranker_scores = min_max_normalization(reranker_scores)
 
     # Calculate price anchor
     budget = parse_budget(query)
@@ -341,11 +377,7 @@ def rank(
 
         popularity = math.log1p(review_count) if isinstance(review_count, (int, float)) and review_count >= 0 else 0.0
 
-        category = meta_data.get('category')
-        if lambda_per_day_by_category and category in lambda_per_day_by_category:
-            recency = recency_score(last_timestamp, lambda_per_day=lambda_per_day_by_category[category])
-        else:
-            recency = recency_score(last_timestamp)
+        recency = recency_score(last_timestamp)
 
         price_fit = price_fit_score(price, price_anchor, price_std=price_std)
 
@@ -361,25 +393,19 @@ def rank(
 
     # Default weights
     default_weights = {
-        "alpha": 0.50,  # semantic similarity
-        "beta": 0.20,  # bayesian rating
-        "gamma": 0.10,  # popularity
+        "alpha": 0.4,  # cos similarity
+        "beta": 0.2,  # bayesian rating
+        "gamma": 0.1,  # popularity
         "delta": 0.05,  # recency
-        "epsilon": 0.10,  # price fit
+        "epsilon": 0.1,  # price fit
         "zeta": 0.05,  # aspect satisfaction
-        "mmr_lambda": 0.3  # trade-off for MMR diversity
+        "eta": 0.05,  # reranker score
+        "mmr_lambda": 0.66  # MMR
     }
 
-    if weights is None:
-        weights = default_weights.copy()
-    else:
-        merged = default_weights.copy()
-        merged.update(weights)
-        weights = merged
+    weights = default_weights.copy()
 
-    if learned_weights:
-        weights.update(learned_weights)
-
+    # Merging
     final_rating_scores = []
 
     for i, (pid, sim) in enumerate(pairs):
@@ -389,24 +415,10 @@ def rank(
                 weights["gamma"] * float(pop_norm[i]) +
                 weights["delta"] * float(recencies[i]) +
                 weights["epsilon"] * float(price_fits[i]) +
-                weights["zeta"] * float(aspect_overlaps[i])
+                weights["zeta"] * float(aspect_overlaps[i]) +
+                weights["eta"] * float(normalized_reranker_scores[i])
         )
         final_rating_scores.append((pid, score))
-
-    def mmr_cosine_similarity(vec_a, vec_b, epsilon=1e-9):
-        if vec_a is None or vec_b is None:
-            return 0.0
-
-        arr_a = np.asarray(vec_a, dtype=float)
-        arr_b = np.asarray(vec_b, dtype=float)
-
-        norm_a = np.linalg.norm(arr_a)
-        norm_b = np.linalg.norm(arr_b)
-
-        if norm_a < epsilon or norm_b < epsilon:
-            return 0.0
-
-        return float(np.dot(arr_a, arr_b) / (norm_a * norm_b))
 
     id_2_vec = {}
 
@@ -415,8 +427,8 @@ def rank(
             review_vector = reviews.get(pid)
             arr = np.asarray(review_vector, dtype=float)
             vec_norm = np.linalg.norm(arr)
-            epsilon = 1e-9
-            id_2_vec[pid] = arr / (vec_norm + epsilon)
+
+            id_2_vec[pid] = arr / (vec_norm + EPSILON)
         else:
             meta_data = products.get(pid, {})
             text = (meta_data.get('title') or '') + ' ' + (meta_data.get('summary') or '')
@@ -457,4 +469,18 @@ def rank(
         selected.append(best_pid)
         candidates.remove(best_pid)
 
-    return [(pid, id_2_score[pid]) for pid in selected]
+    final = [(pid, id_2_score[pid]) for pid in selected]
+
+    with_price = []
+    without_price = []
+
+    for pid, score in final:
+        price = products.get(pid, {}).get("price")
+        if price is None:
+            without_price.append((pid, score))
+        else:
+            with_price.append((pid, score))
+
+    # Place items with prices first
+    # Push items without prices to the end
+    return with_price + without_price
