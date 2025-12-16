@@ -86,17 +86,17 @@ while True:
 
                 num = int(strings[1])
 
-                if num > PRODUCTS:
+                if num > PRODUCTS or num < 1:
 
                     print(f"Please choose a number between 1 and {PRODUCTS}.\n")
 
                 else:
 
-                    product_meta = products[ranked[num][0]]
+                    product_meta = products[ranked[num - 1][0]]
 
                     rag.change_product(product_meta)
 
-                    print(f"Now focusing on the product at rank {num}, which is {products[ranked[num][0]]['title']}.\n")
+                    print(f"Now focusing on the product at rank {num}, which is {products[ranked[num - 1][0]]['title']}.\n")
             else:
 
                 print("please input a number.\n")
