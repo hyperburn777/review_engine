@@ -1,19 +1,13 @@
-# amazon_reviews
-Using the amazon reviews 2023 database to design a recommendation system and q &amp; a system for users
-```python
-product_ids = list(reviews.keys())
+# Amazon Reviews
+Using the amazon reviews 2023 database to design a recommendation system and q &amp; a system for users.
 
-emb_matrix = np.stack([reviews[pid] for pid in product_ids])
+# Data
+https://drive.google.com/drive/u/2/folders/1iJBBhTgFMMBKMTEKQvvzS8gRt6whLH4x  
+The above link contains preprocessed embeddings for the **appliances** subset of the data found [here](https://amazon-reviews-2023.github.io/#load-user-reviews).  
+These embeddings were generated using the embed.py file. Additional embeddings for other categories can also be generated using this method.  
+When testing using this dataset, please keep in mind that it only contains data on appliances (fridges, washing machines, etc). 
 
-similarities = cosine_similarity([query_embedding], emb_matrix)[0]
-
-new_pairs = rank(
-    product_ids,
-    similarities,
-    products,
-    reviews,
-    query,
-    top_k_candidates=200,
-    final_k=10
-)
-```
+# Usage
+The entry point for this project is **semantic.py**. To run, simply execute **python semantic.py**.  
+You will first be asked to input a set of requirements, which will be used to recommend an initial list of products.  
+Afterwards, you can select products from this list and ask detailed questions about each of them. 
